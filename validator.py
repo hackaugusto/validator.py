@@ -338,7 +338,7 @@ if __name__ == '__main__':
 
     if args.test:
         import doctest
-        (failure, test) = doctest.testmod()
+        (failures, total) = doctest.testmod()
 
-        if failure:
-            sys.exit(failure)
+        if failures:
+            sys.exit(failures)
