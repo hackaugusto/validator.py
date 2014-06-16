@@ -1,25 +1,68 @@
 # -*- coding: utf8 -*-
-import sys
+'''
+Validator is a simple way to validate your objects, the intent is to validate
+the values, not to convert them.
+
+>>> String.digit('5')
+True
+
+Validator can be chained togheter, if different values are accepted use a OR:
+
+>>> (Number.even | Number.prime)(5)
+True
+
+If more than one option is required use a AND:
+
+>>> (Number.between(2, 7) & Number.positive)(5)
+True
+
+Chaining validator does a implicit AND:
+
+>>> Number.between(2, 7).positive(5)
+True
+>>> Number.even.prime(2)
+True
+>>> Number.even.prime(5)
+False
+
+Validators are callables that accept one argument
+
+>>> list(filter(Number.prime, range(1, 100)))
+[2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97]
+>>> list(filter(Number.perfect_square, range(1, 100)))
+[1, 4, 9, 16, 25, 36, 49, 64, 81]
+>>> list(filter(Number.prime | Number.perfect_square, range(1, 100)))
+[1, 2, 3, 4, 5, 7, 9, 11, 13, 16, 17, 19, 23, 25, 29, 31, 36, 37, 41, 43, 47, 49, 53, 59, 61, 64, 67, 71, 73, 79, 81, 83, 89, 97]
+'''
 import inspect
+import sys
+
 from math import sqrt, ceil
 from enum import Enum
 from functools import wraps, partial
+
+import six
 
 try:
     from UserList import UserList
 except:
     from collections import UserList
 
-if sys.version[0] == 2:
-    from itertools import xrange as range
 
+if six.PY3:
+    # We cannot use keywords as identifiers (and, or, xor, assert), lets use some
+    # constants instead
+    connective = Enum('Connective', 'AND OR XOR')
+    AND = connective.AND
+    OR = connective.OR
+    XOR = connective.XOR
+else:
+    range = xrange
 
-# We cannot use keywords as identifiers (and, or, xor, assert), lets use some
-# constants instead
-connective = Enum('AND', 'OR', 'XOR')
-AND = connective.AND
-OR = connective.OR
-XOR = connective.XOR
+    connective = Enum('AND', 'OR', 'XOR')
+    AND = connective.AND
+    OR = connective.OR
+    XOR = connective.XOR
 
 
 def chain(validator, function):
@@ -61,9 +104,8 @@ class _registry(type(UserList)):
         return type.__new__(metaclass, class_name, parents, attributes)
 
 
+@six.add_metaclass(_registry)
 class Validator(UserList):
-    __metaclass__ = _registry
-
     def __init__(self, initialdata=None, connective=AND):
         super(Validator, self).__init__(initialdata)
         self.connective = connective
@@ -191,7 +233,8 @@ class NumberValidator(Validator):
 
     @validator
     def perfect_square(value):
-        return sqrt(value) * sqrt(value) == value
+        # beware of precision
+        return sqrt(value).is_integer()
 
     @validator
     def integer(value):
@@ -233,11 +276,11 @@ class NumberValidator(Validator):
             if value % 2 == 0:
                 return False
 
-            for test in range(3, ceil(sqrt(value)) + 1, 2):
+            for test in range(3, int(ceil(sqrt(value))) + 1, 2):
                 if value % test == 0:
-                    return True
+                    return False
 
-            return False
+            return True
 
         return self & primality
 
@@ -285,6 +328,17 @@ class StringValidator(Validator):
 
 
 Number = NumberValidator()
-Natural = Number.integer.non_negative
-Integer = Number.integer
 String = StringValidator()
+
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--test', action='store_true', default=False, help='flag to run the tests')
+    args = parser.parse_args()
+
+    if args.test:
+        import doctest
+        (failure, test) = doctest.testmod()
+
+        if failure:
+            sys.exit(failure)
